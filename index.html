@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador .SD1 com Firebase (IPEN)</title>
+    <!-- SheetJS para leitura de arquivos Excel -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    
+    <!-- SDKs do Firebase (Modular v12.18.0) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-analytics.js";
+        import { getFirestore, collection, doc, getDoc, setDoc, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCH6NI5sv0Z-cEIMwKVPneCKY0NMcQ1T5U",
+            authDomain: "arquivos-previsao-ardigital.firebaseapp.com",
+            projectId: "arquivos-previsao-ardigital",
+            storageBucket: "arquivos-previsao-ardigital.firebasestorage.app",
+            messagingSenderId: "969659293762",
+            appId: "1:969659293762:web:f7fd065c545eea353d4ddb",
+            measurementId: "G-HPQLJFT2EY"
+        };
+
+        try {
+            const app = initializeApp(firebaseConfig);
+            const analytics = getAnalytics(app);
+            const db = getFirestore(app);
+
+            window.db = db;
+            window.firebaseOperations = { collection, doc, getDoc, setDoc, getDocs, query, orderBy };
+            
+            window.dispatchEvent(new CustomEvent('firebase-status', { detail: { connected: true } }));
+            window.dispatchEvent(new Event('firebase-ready'));
+        } catch (error) {
+            console.error("Erro ao inicializar Firebase:", error);
+            window.dispatchEvent(new CustomEvent('firebase-status', { detail: { connected: false } }));
+        }
+    </script>
+
+    <style>
+        :root {
+            --primary: #0284c7;
+            --primary-dark: #0369a1;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border: #cbd5e1;
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.5;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            padding: 30px;
+            border-top: 5px solid var(--primary);
+        }
+        h1 { color: var(--primary-dark); margin-top: 0; font-size: 24px; display: flex; align-items: center; gap: 10px; }
+        p.subtitle { color: var(--text-muted); margin-bottom: 25px; }
+        .section-title {
+            font-size: 16px; font-weight: 600; color: var(--text-main);
+            margin-bottom: 12px; border-bottom: 2px solid #f1f5f9; padding-bottom: 6px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .grid-params { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 15px; margin-bottom: 25px; }
+        .param-group { display: flex; flex-direction: column; }
+        .param-group label { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 5px; }
+        .param-group input { padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; background-color: #f8fafc; color: #334155; font-weight: 600; }
+        .upload-box { border: 2px dashed var(--border); border-radius: 8px; padding: 25px; text-align: center; background: #fdfdfd; cursor: pointer; transition: all 0.2s ease; margin-bottom: 20px; }
+        .upload-box:hover { border-color: var(--primary); background: #f0f9ff; }
+        .upload-box input[type="file"] { display: none; }
+        .upload-label { cursor: pointer; color: var(--primary); font-weight: 600; }
+        .table-container { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; background: white; }
+        th, td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: left; white-space: nowrap; }
+        th { background-color: #f1f5f9; color: var(--text-main); position: sticky; top: 0; }
+        .btn { background-color: var(--primary); color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+        .btn:hover { background-color: var(--primary-dark); }
+        .btn-sm { background-color: var(--primary); color: white; border: none; padding: 5px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; transition: background 0.2s; display: inline-flex; align-items: center; gap: 4px; }
+        .btn-sm:hover { background-color: var(--primary-dark); }
+        
+        /* Indicador Visual do Firebase Local */
+        .firebase-status-banner {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-bottom: 20px;
+            font-weight: 600;
+            border: 1px solid transparent;
+            transition: all 0.3s ease;
+        }
+        .firebase-status-banner.connecting {
+            background-color: #f1f5f9;
+            color: #475569;
+            border-color: #cbd5e1;
+        }
+        .firebase-status-banner.success {
+            background-color: #f0fdf4;
+            color: #166534;
+            border-color: #bbf7d0;
+        }
+        .firebase-status-banner.error {
+            background-color: #fef2f2;
+            color: #991b1b;
+            border-color: #fecaca;
+        }
+        .firebase-logo-container {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 5px;
+            transition: background-color 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .firebase-logo-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .bg-green { background-color: #10b981; }
+        .bg-red { background-color: #ef4444; }
+        .bg-gray { background-color: #94a3b8; }
+
+        .alert-box { background-color: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 12px 15px; border-radius: 6px; margin-bottom: 15px; display: none; }
+        .success-box { background-color: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 12px 15px; border-radius: 6px; margin-top: 15px; display: none; }
+        .badge { background: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>☁️ Gerador .SD1 com Firebase Firestore (IPEN)</h1>
+    <p class="subtitle">Projeto: <code>arquivos-previsao-ardigital</code> — Controle centralizado e bloqueio de duplicidade.</p>
+
+    <!-- Indicador de Conexão com Logotipo Local -->
+    <div id="firebaseStatusBanner" class="firebase-status-banner connecting">
+        <div id="logoContainer" class="firebase-logo-container bg-gray">
+            <img src="logo-FIREBASE.png" alt="Firebase Logo">
+        </div>
+        <span id="statusText">Estabelecendo conexão com o Firebase...</span>
+    </div>
+
+    <div id="alertBox" class="alert-box"></div>
+
+    <div class="section-title">Parâmetros do Sistema</div>
+    <div class="grid-params">
+        <div class="param-group">
+            <label>Sigla do Cliente</label>
+            <input type="text" id="siglaCliente" value="SDN">
+        </div>
+        <div class="param-group">
+            <label>Código do Cliente</label>
+            <input type="text" id="codCliente" value="1285">
+        </div>
+        <div class="param-group">
+            <label>Nome no Header</label>
+            <input type="text" id="nomeCliente" value="INSTITUTO PESQ ENERGETICAS E NUCLEARES">
+        </div>
+        <div class="param-group">
+            <label>Nº Sequencial de Arquivo (Automático)</label>
+            <input type="text" id="numRemessa" value="00001">
+        </div>
+    </div>
+
+    <div class="section-title">Importar Planilha Excel (.xlsx)</div>
+    <div class="upload-box" onclick="document.getElementById('excelFile').click()">
+        <p>Arraste sua planilha aqui ou <span class="upload-label">clique para selecionar</span></p>
+        <input type="file" id="excelFile" accept=".xlsx, .xls, .csv" onchange="handleFile(event)">
+    </div>
+
+    <div id="previewContainer" style="display:none;">
+        <div class="section-title">
+            <span>Pré-visualização dos Dados (<span id="rowCount">0</span> registros)</span>
+            <span class="badge" id="statusBanco">Firebase Ativo</span>
+        </div>
+        <div class="table-container">
+            <table id="previewTable">
+                <thead><tr id="tableHeader"></tr></thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+        <button class="btn" id="generateBtn" onclick="generateSD1()">⬇️ Validar no Firebase, Salvar e Gerar .SD1</button>
+    </div>
+
+    <div id="successBox" class="success-box"></div>
+
+    <!-- Histórico na Nuvem -->
+    <div style="margin-top: 35px;">
+        <div class="section-title">Histórico de Arquivos Gravados no Firestore</div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Nº Sequencial</th>
+                        <th>Data Geração</th>
+                        <th>Nome do Arquivo</th>
+                        <th>Qtd Registros</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="historyBody">
+                    <tr><td colspan="6" style="text-align:center; color: #64748b;">Aguardando conexão...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+let excelData = [];
+// Armazena temporariamente o conteúdo dos arquivos carregados para download rápido
+window.historicoArquivosCache = {};
+
+window.addEventListener('firebase-status', (e) => {
+    const banner = document.getElementById('firebaseStatusBanner');
+    const logoContainer = document.getElementById('logoContainer');
+    const statusText = document.getElementById('statusText');
+
+    banner.classList.remove('connecting', 'success', 'error');
+    logoContainer.classList.remove('bg-gray', 'bg-green', 'bg-red');
+
+    if (e.detail.connected) {
+        banner.classList.add('success');
+        logoContainer.classList.add('bg-green');
+        statusText.textContent = "Conexão ativa com o Firebase Firestore. Remessas sincronizadas e protegidas contra duplicidade.";
+    } else {
+        banner.classList.add('error');
+        logoContainer.classList.add('bg-red');
+        statusText.textContent = "Erro na conexão com o Firebase. Verifique suas credenciais ou regras de acesso.";
+    }
+});
+
+window.addEventListener('firebase-ready', () => {
+    carregarProximoSequencial();
+    atualizarHistorico();
+});
+
+function showAlert(msg) {
+    const box = document.getElementById('alertBox');
+    box.textContent = "⚠️ " + msg;
+    box.style.display = 'block';
+    setTimeout(() => box.style.display = 'none', 6000);
+}
+
+async function carregarProximoSequencial() {
+    try {
+        const { collection, getDocs } = window.firebaseOperations;
+        const querySnapshot = await getDocs(collection(window.db, "remessas"));
+        let remessas = [];
+        querySnapshot.forEach((doc) => {
+            remessas.push(doc.data());
+        });
+
+        if (remessas.length > 0) {
+            let maxSeq = Math.max(...remessas.map(r => parseInt(r.numRemessa, 10)));
+            let nextSeq = (maxSeq + 1).toString().padStart(5, '0');
+            document.getElementById('numRemessa').value = nextSeq;
+        } else {
+            document.getElementById('numRemessa').value = "00001";
+        }
+    } catch (error) {
+        console.error("Erro ao carregar sequencial:", error);
+        window.dispatchEvent(new CustomEvent('firebase-status', { detail: { connected: false } }));
+        showAlert("Erro ao conectar com o Firestore. Verifique se o banco de dados foi criado no Console do Firebase.");
+    }
+}
+
+async function atualizarHistorico() {
+    try {
+        const { collection, getDocs, query, orderBy } = window.firebaseOperations;
+        const q = query(collection(window.db, "remessas"), orderBy("numRemessa", "desc"));
+        const querySnapshot = await getDocs(q);
+        
+        const tbody = document.getElementById('historyBody');
+        tbody.innerHTML = '';
+        window.historicoArquivosCache = {};
+
+        if (querySnapshot.empty) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: #64748b;">Nenhum arquivo registrado na nuvem.</td></tr>';
+            return;
+        }
+
+        querySnapshot.forEach((docSnap) => {
+            let r = docSnap.data();
+            window.historicoArquivosCache[r.numRemessa] = {
+                nomeArquivo: r.nomeArquivo,
+                conteudoTexto: r.conteudoTexto
+            };
+
+            let tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong>${r.numRemessa}</strong></td>
+                <td>${r.dataGeracaoFormatada}</td>
+                <td><code>${r.nomeArquivo}</code></td>
+                <td>${r.totalRegistros}</td>
+                <td><span class="badge" style="background: #dcfce7; color: #166534;">Salvo na Nuvem</span></td>
+                <td>
+                    <button class="btn-sm" onclick="baixarArquivoHistorico('${r.numRemessa}')">⬇️ Baixar .SD1</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (error) {
+        console.error("Erro ao carregar histórico:", error);
+        window.dispatchEvent(new CustomEvent('firebase-status', { detail: { connected: false } }));
+    }
+}
+
+function baixarArquivoHistorico(numRemessa) {
+    let dados = window.historicoArquivosCache[numRemessa];
+    if (!dados || !dados.conteudoTexto) {
+        alert("Conteúdo do arquivo não encontrado em cache.");
+        return;
+    }
+
+    const conteudoArquivo = dados.conteudoTexto;
+    const uint8Array = new Uint8Array(conteudoArquivo.length);
+    for (let i = 0; i < conteudoArquivo.length; i++) {
+        uint8Array[i] = conteudoArquivo.charCodeAt(i) & 0xFF;
+    }
+
+    const blob = new Blob([uint8Array], { type: "text/plain;charset=iso-8859-1" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = dados.nomeArquivo;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function handleFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, {type: 'array'});
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            
+            excelData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+            
+            if (excelData.length < 2) {
+                alert("A planilha está vazia ou contém apenas o cabeçalho.");
+                return;
+            }
+
+            displayPreview(excelData);
+        } catch (error) {
+            alert("Erro ao ler o arquivo Excel: " + error.message);
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+function displayPreview(data) {
+    const headers = data[0];
+    const rows = data.slice(1);
+
+    const headerTr = document.getElementById('tableHeader');
+    headerTr.innerHTML = '';
+    headers.forEach(h => {
+        let th = document.createElement('th');
+        th.textContent = h;
+        headerTr.appendChild(th);
+    });
+
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+    rows.forEach(row => {
+        let tr = document.createElement('tr');
+        headers.forEach((_, i) => {
+            let td = document.createElement('td');
+            td.textContent = row[i] !== undefined ? row[i] : '';
+            tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+    });
+
+    document.getElementById('rowCount').textContent = rows.length;
+    document.getElementById('previewContainer').style.display = 'block';
+    document.getElementById('successBox').style.display = 'none';
+}
+
+function formatarCampo(valor, tamanho, tipo = 'alfa') {
+    let valStr = (valor === null || valor === undefined) ? '' : String(valor).trim();
+    if (tipo === 'num') {
+        return valStr.padStart(tamanho, '0');
+    } else {
+        if (valStr.length > tamanho) return valStr.substring(0, tamanho);
+        return valStr.padEnd(tamanho, ' ');
+    }
+}
+
+async function generateSD1() {
+    if (excelData.length < 2) return;
+
+    const numRemessa = document.getElementById('numRemessa').value.trim();
+    const { collection, getDocs } = window.firebaseOperations;
+
+    try {
+        const docRefSeq = doc(window.db, "remessas", numRemessa);
+        const docSnapSeq = await getDoc(docRefSeq);
+
+        if (docSnapSeq.exists()) {
+            let dadosAntigos = docSnapSeq.data();
+            showAlert(`ATENÇÃO: O número sequencial de remessa [${numRemessa}] já foi gerado anteriormente em ${dadosAntigos.dataGeracaoFormatada}!`);
+            return;
+        }
+
+        const querySnapshot = await getDocs(collection(window.db, "objetosRegistrados"));
+        const objetosNoBanco = new Set();
+        querySnapshot.forEach((doc) => {
+            objetosNoBanco.add(doc.data().numObjetoPuro);
+        });
+
+        executarGeracaoSD1(numRemessa, objetosNoBanco);
+
+    } catch (error) {
+        console.error("Erro ao validar no Firebase:", error);
+        window.dispatchEvent(new CustomEvent('firebase-status', { detail: { connected: false } }));
+        showAlert("Erro de comunicação com o Firebase ao validar duplicidades.");
+    }
+}
+
+async function executarGeracaoSD1(numRemessa, objetosNoBanco) {
+    const headers = excelData[0].map(h => String(h).trim().toUpperCase());
+    const rows = excelData.slice(1);
+
+    const siglaCliente = document.getElementById('siglaCliente').value;
+    const codCliente = document.getElementById('codCliente').value;
+    const nomeCliente = document.getElementById('nomeCliente').value;
+
+    const getColIndex = (names) => {
+        for (let name of names) {
+            let idx = headers.indexOf(name.toUpperCase());
+            if (idx !== -1) return idx;
+        }
+        return -1;
+    };
+
+    const idxObjeto = getColIndex(['OBJETO']);
+    const idxDestinatario = getColIndex(['DESTINATARIO', 'NOME']);
+    const idxEndereco = getColIndex(['ENDERECO', 'LOGRADOURO']);
+    const idxNum = getColIndex(['NUM', 'NUMERO']);
+    const idxCompl = getColIndex(['COMPL', 'COMPLEMENTO']);
+    const idxCidade = getColIndex(['CIDADE']);
+    const idxUf = getColIndex(['UF', 'ESTADO']);
+    const idxCep = getColIndex(['CEP']);
+    const idxConteudo = getColIndex(['CONTEUDO']);
+
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const dataGeracao = `${yyyy}${mm}${dd}`;
+    const dataGeracaoFormatada = `${dd}/${mm}/${yyyy} às ${String(today.getHours()).padStart(2,'0')}:${String(today.getMinutes()).padStart(2,'0')}`;
+
+    let linhasDetalheValidas = [];
+    let objetosNaRemessaAtual = new Set();
+    let novosObjetosParaSalvar = [];
+
+    for (let index = 0; index < rows.length; index++) {
+        let row = rows[index];
+        let objetoCompleto = idxObjeto !== -1 ? String(row[idxObjeto] || '') : '';
+        let siglaObj = objetoCompleto.length >= 2 ? objetoCompleto.substring(0, 2) : 'SW';
+        let numObjPuro = objetoCompleto.replace(/[^0-9]/g, '');
+        if (numObjPuro.length >= 9) numObjPuro = numObjPuro.substring(0, 9);
+        else numObjPuro = numObjPuro.padStart(9, '0');
+
+        let codigoOperacao = "1101";
+
+        let ehDuplicado = false;
+        let origemDuplicidade = "";
+
+        if (objetosNoBanco.has(numObjPuro)) {
+            ehDuplicado = true;
+            origemDuplicidade = "Base de Dados (histórico anterior)";
+        } else if (objetosNaRemessaAtual.has(numObjPuro)) {
+            ehDuplicado = true;
+            origemDuplicidade = "Mesma Remessa (duplicado na planilha)";
+        }
+
+        if (ehDuplicado) {
+            let desejaAlterar = confirm(`Duplicidade detectada para o Objeto: [${objetoCompleto}] (${origemDuplicidade}).\n\nDeseja alterar o código da operação para 1102 (indica que o objeto não será mais postado)?\n\nClique em [OK] para alterar para 1102 ou [Cancelar] para ignorar/excluir este registro.`);
+            
+            if (desejaAlterar) {
+                codigoOperacao = "1102";
+            } else {
+                continue;
+            }
+        }
+
+        objetosNaRemessaAtual.add(numObjPuro);
+        novosObjetosParaSalvar.push(numObjPuro);
+
+        let seqReg = linhasDetalheValidas.length + 2;
+        let destinatario = idxDestinatario !== -1 ? row[idxDestinatario] : '';
+        let logradouro = idxEndereco !== -1 ? String(row[idxEndereco] || '') : '';
+        let numero = idxNum !== -1 ? String(row[idxNum] || '') : '';
+        let complemento = idxCompl !== -1 ? String(row[idxCompl] || '') : '';
+        let enderecoCompleto = logradouro;
+        if (numero) enderecoCompleto += `, ${numero}`;
+        if (complemento) enderecoCompleto += ` - ${complemento}`;
+
+        let cidade = idxCidade !== -1 ? row[idxCidade] : '';
+        let uf = idxUf !== -1 ? row[idxUf] : '';
+        let cep = idxCep !== -1 ? String(row[idxCep] || '').replace(/[^0-9]/g, '') : '';
+        let conteudo = idxConteudo !== -1 ? row[idxConteudo] : 'DOCUMENTOS';
+
+        let detalhe =
+            "9" +
+            formatarCampo(codCliente, 4, 'num') +
+            formatarCampo(siglaCliente, 8) +
+            formatarCampo(siglaObj, 2) +
+            formatarCampo(numObjPuro, 9, 'num') +
+            "BR" +
+            codigoOperacao +
+            formatarCampo(conteudo, 60) +
+            formatarCampo(destinatario, 40) +
+            formatarCampo(enderecoCompleto, 80) +
+            formatarCampo(cidade, 30) +
+            formatarCampo(uf, 2) +
+            formatarCampo(cep, 8, 'num') +
+            "0".repeat(8) +
+            formatarCampo(numRemessa, 5, 'num') +
+            formatarCampo(seqReg, 7, 'num');
+
+        linhasDetalheValidas.push(detalhe);
+    }
+
+    const qtdeRegistrosTotal = linhasDetalheValidas.length + 1;
+
+    let header = 
+        "8" +
+        formatarCampo(codCliente, 4, 'num') +
+        "0".repeat(15) +
+        formatarCampo(nomeCliente, 40) +
+        formatarCampo(dataGeracao, 8, 'num') +
+        formatarCampo(qtdeRegistrosTotal, 6, 'num') +
+        "0".repeat(184) +
+        formatarCampo(numRemessa, 5, 'num') +
+        "0000001";
+
+    let linhas = [header, ...linhasDetalheValidas];
+    const conteudoArquivo = linhas.join("\r\n") + "\r\n";
+    const nomeArquivo = `${siglaCliente.trim().padEnd(8, ' ')}1${dd}${mm}${numRemessa}.SD1`;
+
+    // Download imediato no navegador
+    const uint8Array = new Uint8Array(conteudoArquivo.length);
+    for (let i = 0; i < conteudoArquivo.length; i++) {
+        uint8Array[i] = conteudoArquivo.charCodeAt(i) & 0xFF;
+    }
+    const blob = new Blob([uint8Array], { type: "text/plain;charset=iso-8859-1" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nomeArquivo;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    try {
+        const { doc, setDoc } = window.firebaseOperations;
+        
+        // Salva metadados e o conteúdo do arquivo no Firestore para permitir o re-download direto do histórico
+        await setDoc(doc(window.db, "remessas", numRemessa), {
+            numRemessa: numRemessa,
+            dataGeracao: dataGeracao,
+            dataGeracaoFormatada: dataGeracaoFormatada,
+            nomeArquivo: nomeArquivo,
+            totalRegistros: linhasDetalheValidas.length,
+            conteudoTexto: conteudoArquivo
+        });
+
+        for (let objPuro of novosObjetosParaSalvar) {
+            await setDoc(doc(window.db, "objetosRegistrados", `${numRemessa}_${objPuro}`), {
+                numRemessa: numRemessa,
+                numObjetoPuro: objPuro,
+                dataRegistro: dataGeracao
+            });
+        }
+
+        const successBox = document.getElementById('successBox');
+        successBox.innerHTML = `✅ Arquivo <strong>${nomeArquivo}</strong> gerado com sucesso (${linhasDetalheValidas.length} registros válidos) e registrado no Firebase!`;
+        successBox.style.display = 'block';
+
+        carregarProximoSequencial();
+        atualizarHistorico();
+    } catch (error) {
+        console.error("Erro ao salvar no Firebase:", error);
+        window.dispatchEvent(new CustomEvent('firebase-status', { detail: { connected: false } }));
+        showAlert("O arquivo foi baixado, mas houve um erro ao registrar a transação no Firestore.");
+    }
+}
+</script>
+
+</body>
+</html>
