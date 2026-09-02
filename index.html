@@ -91,7 +91,6 @@
         .btn-sm { background-color: var(--primary); color: white; border: none; padding: 5px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; transition: background 0.2s; display: inline-flex; align-items: center; gap: 4px; }
         .btn-sm:hover { background-color: var(--primary-dark); }
         
-        /* Indicador Visual do Firebase Local */
         .firebase-status-banner {
             display: flex;
             align-items: center;
@@ -104,37 +103,13 @@
             border: 1px solid transparent;
             transition: all 0.3s ease;
         }
-        .firebase-status-banner.connecting {
-            background-color: #f1f5f9;
-            color: #475569;
-            border-color: #cbd5e1;
-        }
-        .firebase-status-banner.success {
-            background-color: #f0fdf4;
-            color: #166534;
-            border-color: #bbf7d0;
-        }
-        .firebase-status-banner.error {
-            background-color: #fef2f2;
-            color: #991b1b;
-            border-color: #fecaca;
-        }
+        .firebase-status-banner.connecting { background-color: #f1f5f9; color: #475569; border-color: #cbd5e1; }
+        .firebase-status-banner.success { background-color: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+        .firebase-status-banner.error { background-color: #fef2f2; color: #991b1b; border-color: #fecaca; }
         .firebase-logo-container {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 5px;
-            transition: background-color 0.3s ease;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; padding: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
-        .firebase-logo-container img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-        }
+        .firebase-logo-container img { width: 100%; height: 100%; object-fit: contain; }
         .bg-green { background-color: #10b981; }
         .bg-red { background-color: #ef4444; }
         .bg-gray { background-color: #94a3b8; }
@@ -150,7 +125,6 @@
     <h1>☁️ Gerador .SD1 com Firebase Firestore (IPEN)</h1>
     <p class="subtitle">Projeto: <code>arquivos-previsao-ardigital</code> — Controle centralizado e bloqueio de duplicidade.</p>
 
-    <!-- Indicador de Conexão com Logotipo Local -->
     <div id="firebaseStatusBanner" class="firebase-status-banner connecting">
         <div id="logoContainer" class="firebase-logo-container bg-gray">
             <img src="logo-FIREBASE.png" alt="Firebase Logo">
@@ -202,7 +176,6 @@
 
     <div id="successBox" class="success-box"></div>
 
-    <!-- Histórico na Nuvem -->
     <div style="margin-top: 35px;">
         <div class="section-title">Histórico de Arquivos Gravados no Firestore</div>
         <div class="table-container">
@@ -227,7 +200,6 @@
 
 <script>
 let excelData = [];
-// Armazena temporariamente o conteúdo dos arquivos carregados para download rápido
 window.historicoArquivosCache = {};
 
 window.addEventListener('firebase-status', (e) => {
@@ -419,7 +391,7 @@ async function generateSD1() {
     if (excelData.length < 2) return;
 
     const numRemessa = document.getElementById('numRemessa').value.trim();
-    const { collection, getDocs } = window.firebaseOperations;
+    const { collection, getDocs, doc, getDoc } = window.firebaseOperations;
 
     try {
         const docRefSeq = doc(window.db, "remessas", numRemessa);
@@ -433,8 +405,8 @@ async function generateSD1() {
 
         const querySnapshot = await getDocs(collection(window.db, "objetosRegistrados"));
         const objetosNoBanco = new Set();
-        querySnapshot.forEach((doc) => {
-            objetosNoBanco.add(doc.data().numObjetoPuro);
+        querySnapshot.forEach((docItem) => {
+            objetosNoBanco.add(docItem.data().numObjetoPuro);
         });
 
         executarGeracaoSD1(numRemessa, objetosNoBanco);
@@ -552,6 +524,12 @@ async function executarGeracaoSD1(numRemessa, objetosNoBanco) {
         linhasDetalheValidas.push(detalhe);
     }
 
+    // Validação: Se não houver nenhum registro válido, cancela a geração do arquivo
+    if (linhasDetalheValidas.length === 0) {
+        alert("Nenhum registro válido para importar. Todos os itens da planilha foram identificados como duplicados e ignorados, portanto o arquivo .SD1 não será gerado.");
+        return;
+    }
+
     const qtdeRegistrosTotal = linhasDetalheValidas.length + 1;
 
     let header = 
@@ -569,7 +547,6 @@ async function executarGeracaoSD1(numRemessa, objetosNoBanco) {
     const conteudoArquivo = linhas.join("\r\n") + "\r\n";
     const nomeArquivo = `${siglaCliente.trim().padEnd(8, ' ')}1${dd}${mm}${numRemessa}.SD1`;
 
-    // Download imediato no navegador
     const uint8Array = new Uint8Array(conteudoArquivo.length);
     for (let i = 0; i < conteudoArquivo.length; i++) {
         uint8Array[i] = conteudoArquivo.charCodeAt(i) & 0xFF;
@@ -587,7 +564,6 @@ async function executarGeracaoSD1(numRemessa, objetosNoBanco) {
     try {
         const { doc, setDoc } = window.firebaseOperations;
         
-        // Salva metadados e o conteúdo do arquivo no Firestore para permitir o re-download direto do histórico
         await setDoc(doc(window.db, "remessas", numRemessa), {
             numRemessa: numRemessa,
             dataGeracao: dataGeracao,
